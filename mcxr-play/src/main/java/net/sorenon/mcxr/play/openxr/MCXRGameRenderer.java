@@ -7,42 +7,51 @@ import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Matrix4f;
-import com.mojang.math.Vector3f;
+//import com.mojang.math.Vector3f;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.ScreenEffectRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.resources.model.ModelBakery;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
+import net.sorenon.mcxr.core.JOMLUtil;
 import net.sorenon.mcxr.core.MCXRCore;
+import net.sorenon.mcxr.core.Pose;
+import net.sorenon.mcxr.core.Teleport;
 import net.sorenon.mcxr.core.accessor.PlayerExt;
 import net.sorenon.mcxr.core.mixin.LivingEntityAcc;
 import net.sorenon.mcxr.play.MCXRGuiManager;
 import net.sorenon.mcxr.play.MCXRPlayClient;
 import net.sorenon.mcxr.play.PlayOptions;
 import net.sorenon.mcxr.play.accessor.MinecraftExt;
+import net.sorenon.mcxr.play.input.actionsets.VanillaGameplayActionSet;
 import net.sorenon.mcxr.play.rendering.MCXRCamera;
 import net.sorenon.mcxr.play.rendering.MCXRMainTarget;
 import net.sorenon.mcxr.play.rendering.RenderPass;
 import net.sorenon.mcxr.play.rendering.XrRenderTarget;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFW;
 import net.sorenon.mcxr.play.input.XrInput;
@@ -189,7 +198,8 @@ public class MCXRGameRenderer {
 
             //Update the server-side player poses
             if (Minecraft.getInstance().player != null && MCXRCore.getCoreConfig().supportsMCXR()) {
-                PlayerExt acc = (PlayerExt) Minecraft.getInstance().player;
+                Player player = Minecraft.getInstance().player;
+                PlayerExt acc = (PlayerExt) player;
                 if (!acc.isXR()) {
                     FriendlyByteBuf buf = PacketByteBufs.create();
                     buf.writeBoolean(true);
@@ -201,8 +211,29 @@ public class MCXRGameRenderer {
                         MCXRPlayClient.viewSpacePoses.getMinecraftPose(),
                         XrInput.handsActionSet.gripPoses[0].getMinecraftPose(),
                         XrInput.handsActionSet.gripPoses[1].getMinecraftPose(),
+                        MCXRPlayClient.viewSpacePoses.getPhysicalPose().getPos().y,
                         (float) Math.toRadians(PlayOptions.handPitchAdjust)
                 );
+
+                if (XrInput.teleport) {
+                    XrInput.teleport = false;
+                    int handIndex = 0;
+                    if (player.getMainArm() == HumanoidArm.LEFT) {
+                        handIndex = 1;
+                    }
+
+                    Pose pose = XrInput.handsActionSet.gripPoses[handIndex].getMinecraftPose();
+
+                    Vector3f dir = pose.getOrientation().rotateX((float) java.lang.Math.toRadians(PlayOptions.handPitchAdjust), new Quaternionf()).transform(new Vector3f(0, -1, 0));
+
+                    var pos = Teleport.tp(player, JOMLUtil.convert(pose.getPos()), JOMLUtil.convert(dir));
+                    if (pos != null) {
+                        ClientPlayNetworking.send(MCXRCore.TELEPORT, PacketByteBufs.empty());
+                        player.setPos(pos);
+                    }
+                }
+            } else {
+                XrInput.teleport = false;
             }
         });
 
@@ -486,8 +517,7 @@ public class MCXRGameRenderer {
         bufferBuilder.vertex(0.0, height * 2, 0.0).uv(0.0F, 1 - v * 2).color(255, 255, 255, 255).endVertex();
         bufferBuilder.vertex(width * 2, 0.0, 0.0).uv(u * 2, 1).color(255, 255, 255, 255).endVertex();
         bufferBuilder.vertex(0.0, 0.0, 0.0).uv(0.0F, 1).color(255, 255, 255, 255).endVertex();
-        bufferBuilder.end();
-        BufferUploader._endInternal(bufferBuilder);
+        BufferUploader.draw(bufferBuilder.end());
         shader.clear();
         GlStateManager._depthMask(true);
         GlStateManager._colorMask(true, true, true, true);
@@ -549,8 +579,9 @@ public class MCXRGameRenderer {
         bufferBuilder.vertex(width-xOff, height-yOff, 0.0).uv(1, 0.0f).color(255, 255, 255, 255).endVertex();
         bufferBuilder.vertex(width-xOff, yOff, 0.0).uv(1, 1.0f).color(255, 255, 255, 255).endVertex();
         bufferBuilder.vertex(xOff, yOff, 0.0).uv(0.0F, 1.0F).color(255, 255, 255, 255).endVertex();
-        bufferBuilder.end();
-        BufferUploader._endInternal(bufferBuilder);
+        //bufferBuilder.end();
+        //BufferUploader._endInternal(bufferBuilder);
+        BufferUploader.draw(bufferBuilder.end());
         shader.clear();
         GlStateManager._depthMask(true);
         GlStateManager._colorMask(true, true, true, true);
@@ -601,8 +632,7 @@ public class MCXRGameRenderer {
         bufferBuilder.vertex(width, 0.0, -90.0).uv(1f, 1f).color(red, green, blue, alpha).endVertex();
         bufferBuilder.vertex(0.0, 0.0, -90.0).uv(0f, 1f).color(red, green, blue, alpha).endVertex();
 
-        bufferBuilder.end();
-        BufferUploader._endInternal(bufferBuilder);
+        BufferUploader.draw(bufferBuilder.end());
         shader.clear();
         GlStateManager._depthMask(true);
         GlStateManager._colorMask(true, true, true, true);
@@ -634,7 +664,8 @@ public class MCXRGameRenderer {
             //renderOverlay(framebuffer, new ResourceLocation("textures/misc/vignette.png"),0f,f,f,1f);
             renderOverlay(framebuffer, new ResourceLocation("textures/misc/vignette_vr.png"),0f,0f,0f,f);
         } else {
-            float g = Mth.clamp(1.0F - entity.getBrightness(), 0.0F, 1.0F);
+            float l = LightTexture.getBrightness(entity.level.dimensionType(), entity.level.getMaxLocalRawBrightness(new BlockPos(entity.getX(), entity.getEyeY(), entity.getZ())));
+            float g = Mth.clamp(1.0F - l, 0.0F, 1.0F);
             //RenderSystem.setShaderColor(g, g, g, 1.0F);
             //renderOverlay(framebuffer, new ResourceLocation("textures/misc/vignette.png"),g,g,g,1f);
             renderOverlay(framebuffer, new ResourceLocation("textures/misc/vignette_vr.png"),0f,0f,0f,g);
@@ -692,8 +723,7 @@ public class MCXRGameRenderer {
         bufferBuilder.vertex(width, 0.0, -90.0).uv(h, g).color(1f, 1f, 1f, nauseaStrength).endVertex();
         bufferBuilder.vertex(0.0, 0.0, -90.0).uv(f, g).color(1f, 1f, 1f, nauseaStrength).endVertex();
 
-        bufferBuilder.end();
-        BufferUploader._endInternal(bufferBuilder);
+        BufferUploader.draw(bufferBuilder.end());
         shader.clear();
         GlStateManager._depthMask(true);
         GlStateManager._colorMask(true, true, true, true);
