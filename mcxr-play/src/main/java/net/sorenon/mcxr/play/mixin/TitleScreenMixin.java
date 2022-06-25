@@ -8,6 +8,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.util.Mth;
 import net.sorenon.mcxr.play.MCXROptionsScreen;
 import net.sorenon.mcxr.play.MCXRPlayClient;
@@ -45,7 +46,7 @@ public abstract class TitleScreenMixin extends Screen {
                 y,
                 90,
                 20,
-                Component.translatable("mcxr.options.title"),
+                new TranslatableComponent("mcxr.options.title"),
                 button -> this.minecraft.setScreen(new MCXROptionsScreen(this))));
     }
 

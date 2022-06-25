@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TranslatableComponent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,15 +77,10 @@ public class QuickChat extends ChatScreen {
             int buttonWidth = 8 * word.length();
             int buttonHeight = 20;
 
-            this.addRenderableWidget(
-                    new Button(buttonX, buttonY, buttonWidth, buttonHeight, Component.translatable(word), (button -> {
-                        if (word.startsWith("/")) {
-                            Minecraft.getInstance().player.command(word.substring(1));
-                        } else {
-                            Minecraft.getInstance().player.chat(word);
-                        }
+            new Button(buttonX, buttonY, buttonWidth, buttonHeight, new TranslatableComponent(word), (button -> {
+                this.sendMessage(word);
 //                        Minecraft.getInstance().gui.getChat().clearMessages(true);
-                    }))
+                    })
             );
 
             if (i % 8 == 0 && i != 0) {
